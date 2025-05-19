@@ -4,6 +4,9 @@ use std::collections::HashMap;
 #[derive(Resource, Default)]
 struct Turn(u32);
 
+#[derive(Event)]
+struct TurnDeltaEvent(u32);
+
 #[derive(Resource, Default)]
 struct Notificiations(Vec<Notification>);
 
@@ -66,10 +69,13 @@ struct QuestDescription {
 }
 
 #[derive(Component)]
-struct Progress {
-    initial_value: u32,
-    turns_remaining: u32,
+struct TurnTimer {
+    initial_value: u32, // Number of turns this timer will take (or has taken) to complete.
+    turns_remaining: u32, // Starts equal to initial_value and counts down to 0.
 }
+
+#[derive(Event)]
+struct TurnTimerComplete(Entity);
 
 #[derive(Bundle)]
 struct HeroBundle {
@@ -83,7 +89,7 @@ struct HeroBundle {
 struct QuestBundle {
     marker: Quest,
     description: QuestDescription,
-    progress: Progress,
+    progress: TurnTimer,
 }
 
 fn main() {
@@ -92,9 +98,13 @@ fn main() {
         .init_resource::<Turn>()
         .init_resource::<Notificiations>()
         .add_event::<NotificationEvent>()
+        .add_event::<TurnDeltaEvent>()
+        .add_event::<TurnTimerComplete>()
         .add_systems(Startup, setup)
         .add_systems(Update, log_new_hero)
         .add_systems(Update, handle_notifcation_events)
+        .add_systems(Update, advance_turn)
+        .add_systems(Update, advance_turn_timer)
         .run();
 }
 
@@ -137,8 +147,8 @@ fn setup(mut commands: Commands) {
             item_reward: None,
             turns_to_expiry: 10,
         },
-        progress: Progress {
-            initial_value: 0,
+        progress: TurnTimer {
+            initial_value: 5,
             turns_remaining: 5,
         },
     });
@@ -171,9 +181,35 @@ fn handle_notifcation_events(
 }
 
 // When TurnDelta event happens, advance Turn resource
+fn advance_turn(
+    mut turn: ResMut<Turn>,
+    mut ev_turn_delta: EventReader<TurnDeltaEvent>,
+    mut ev_notify: EventWriter<NotificationEvent>
+) {
+    let total_delta: u32 = ev_turn_delta.read().map(|e| e.0).sum();
+    turn.0 += total_delta;
+    ev_notify.write(NotificationEvent(format!(
+        "Turn advanced by {}. Current turn: {}",
+        total_delta, turn.0
+    )));
+}
 
-// On TurnDelta event, for Progress components, advance progress. If progress complete, emit ProgressComplete event.
+// On TurnDelta event, for TurnTimer components, advance progress. If progress complete, emit TurnTimerComplete event.
+fn advance_turn_timer(
+    mut ev_turn_delta: EventReader<TurnDeltaEvent>,
+    mut query: Query<(Entity, &mut TurnTimer)>,
+    mut ev_turn_timer_complete: EventWriter<TurnTimerComplete>,
+) {
+    let turn_delta: u32 = ev_turn_delta.read().map(|e| e.0).sum();
+    query.iter_mut().for_each(|(entity, mut timer)| {
+        timer.turns_remaining = timer.turns_remaining.saturating_sub(turn_delta);
+        if timer.turns_remaining == 0 {
+            ev_turn_timer_complete.write(TurnTimerComplete(entity));
+            info!("Turn timer complete for entity: {:?}", entity);
+        }
+    });
+}
 
-// On ProgressComplete event, for entities with Quest and OnQuestBoard markers, despawn the entity.
+// On TurnTimerComplete event, for entities with Quest and OnQuestBoard markers, despawn the entity.
 
-// On ProgressComplete event, for entities with Quest and QuestInProgress markers, a ProbabilityOfSuccess.
+// On TurnTimerComplete event, for entities with Quest and QuestInProgress markers, a ProbabilityOfSuccess.
