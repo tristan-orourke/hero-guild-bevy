@@ -58,6 +58,12 @@ struct Item {
 #[derive(Component)]
 struct Quest;
 
+// Quest status markers
+#[derive(Component)]
+struct QuestStatusAvailable;
+#[derive(Component)]
+struct QuestStatusInProgress;
+
 #[derive(Component)]
 struct QuestDescription {
     difficulty_level: u32,
@@ -74,8 +80,8 @@ struct TurnTimer {
     turns_remaining: u32, // Starts equal to initial_value and counts down to 0.
 }
 
-#[derive(Event)]
-struct TurnTimerComplete(Entity);
+#[derive(Component)]
+struct TurnTimerComplete; // A marker component to indicate that the timer has completed.
 
 #[derive(Bundle)]
 struct HeroBundle {
@@ -90,6 +96,7 @@ struct QuestBundle {
     marker: Quest,
     description: QuestDescription,
     progress: TurnTimer,
+    status: QuestStatusAvailable,
 }
 
 fn main() {
@@ -99,12 +106,12 @@ fn main() {
         .init_resource::<Notificiations>()
         .add_event::<NotificationEvent>()
         .add_event::<TurnDeltaEvent>()
-        .add_event::<TurnTimerComplete>()
         .add_systems(Startup, setup)
         .add_systems(Update, log_new_hero)
         .add_systems(Update, handle_notifcation_events)
         .add_systems(Update, advance_turn)
         .add_systems(Update, advance_turn_timer)
+        .add_systems(Update, expire_quest)
         .run();
 }
 
@@ -151,6 +158,7 @@ fn setup(mut commands: Commands) {
             initial_value: 5,
             turns_remaining: 5,
         },
+        status: QuestStatusAvailable,
     });
 }
 
@@ -184,7 +192,7 @@ fn handle_notifcation_events(
 fn advance_turn(
     mut turn: ResMut<Turn>,
     mut ev_turn_delta: EventReader<TurnDeltaEvent>,
-    mut ev_notify: EventWriter<NotificationEvent>
+    mut ev_notify: EventWriter<NotificationEvent>,
 ) {
     let total_delta: u32 = ev_turn_delta.read().map(|e| e.0).sum();
     turn.0 += total_delta;
@@ -194,22 +202,42 @@ fn advance_turn(
     )));
 }
 
-// On TurnDelta event, for TurnTimer components, advance progress. If progress complete, emit TurnTimerComplete event.
+// On TurnDelta event, for TurnTimer components, advance progress. If progress complete, add TurnTimerComplete entity.
 fn advance_turn_timer(
     mut ev_turn_delta: EventReader<TurnDeltaEvent>,
     mut query: Query<(Entity, &mut TurnTimer)>,
-    mut ev_turn_timer_complete: EventWriter<TurnTimerComplete>,
+    mut commands: Commands,
 ) {
     let turn_delta: u32 = ev_turn_delta.read().map(|e| e.0).sum();
     query.iter_mut().for_each(|(entity, mut timer)| {
         timer.turns_remaining = timer.turns_remaining.saturating_sub(turn_delta);
         if timer.turns_remaining == 0 {
-            ev_turn_timer_complete.write(TurnTimerComplete(entity));
+            commands.entity(entity).insert(TurnTimerComplete);
             info!("Turn timer complete for entity: {:?}", entity);
         }
     });
 }
 
-// On TurnTimerComplete event, for entities with Quest and OnQuestBoard markers, despawn the entity.
+// For Quests that are Available with a complete TurnTimer, despawn the entity.
+fn expire_quest(
+    mut commands: Commands,
+    query: Query<
+        Entity,
+        (
+            With<Quest>,
+            With<QuestStatusAvailable>,
+            With<TurnTimerComplete>,
+        ),
+    >,
+    mut ev_notify: EventWriter<NotificationEvent>,
+) {
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+        ev_notify.write(NotificationEvent(format!(
+            "An availabe quest expired: entity {:?}",
+            entity
+        )));
+    }
+}
 
 // On TurnTimerComplete event, for entities with Quest and QuestInProgress markers, a ProbabilityOfSuccess.
