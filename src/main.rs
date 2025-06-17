@@ -255,7 +255,7 @@ fn turn_delta_did_send_notification() {
     
 }
 
-// On TurnDelta event, for TurnTimer components, advance progress. If progress complete, add TurnTimerCompleteEvent entity.
+// On TurnDelta event, for TurnTimer components, advance progress. If progress complete, emit TurnTimerComplete event.
 fn advance_turn_timer(
     mut ev_turn_delta: EventReader<TurnDeltaEvent>,
     mut query: Query<(Entity, &mut TurnTimer)>,
@@ -272,6 +272,93 @@ fn advance_turn_timer(
                 info!("Turn timer complete for entity: {:?}", entity);
             }
         });
+}
+
+#[test]
+fn turn_delta_did_advance_turn_timer() {
+    let mut app = App::new();
+    app.add_event::<TurnDeltaEvent>();
+    app.add_event::<TurnTimerCompleteEvent>();
+
+    // Add a TurnTimer component to an entity
+    let entity = app.world_mut().spawn((
+        TurnTimer {
+            initial_value: 5,
+            turns_remaining: 5,
+        },
+    )).id();
+
+    // Add the system under test
+    app.add_systems(Update, advance_turn_timer);
+
+    // Send a TurnDeltaEvent
+    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(1));
+    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(2));
+
+    // Run the system
+    app.update();
+
+    // Check that the timer was decremented
+    let timer = app.world().get::<TurnTimer>(entity).unwrap();
+    assert_eq!(timer.turns_remaining, 2);
+}
+
+#[test]
+fn advance_turn_timer_did_emit_completion_event() {
+    let mut app = App::new();
+    app.add_event::<TurnDeltaEvent>();
+    app.add_event::<TurnTimerCompleteEvent>();
+
+    // Add a TurnTimer component to an entity
+    let entity = app.world_mut().spawn((
+        TurnTimer {
+            initial_value: 5,
+            turns_remaining: 5,
+        },
+    )).id();
+
+    // Add the system under test
+    app.add_systems(Update, advance_turn_timer);
+
+    // Send a TurnDeltaEvent that will complete the timer
+    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(5));
+
+    // Run the system
+    app.update();
+
+    // Check that the TurnTimerCompleteEvent was emitted
+    let turn_timer_events = app.world().resource::<Events<TurnTimerCompleteEvent>>();
+    let mut reader = turn_timer_events.get_cursor();
+    let event = reader.read(turn_timer_events).next().unwrap();
+    assert_eq!(event.0, entity);
+}
+
+#[test]
+fn advance_turn_timer_doesnt_go_past_zero() {
+    let mut app = App::new();
+    app.add_event::<TurnDeltaEvent>();
+    app.add_event::<TurnTimerCompleteEvent>();
+
+    // Add a TurnTimer component to an entity
+    let entity = app.world_mut().spawn((
+        TurnTimer {
+            initial_value: 5,
+            turns_remaining: 5,
+        },
+    )).id();
+
+    // Add the system under test
+    app.add_systems(Update, advance_turn_timer);
+
+    // Send a TurnDeltaEvent that will go past zero
+    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(10));
+
+    // Run the system
+    app.update();
+
+    // Check that the timer was not decremented below zero
+    let timer = app.world().get::<TurnTimer>(entity).unwrap();
+    assert_eq!(timer.turns_remaining, 0);
 }
 
 // For Quests that are Available with a complete TurnTimer, despawn the entity.
