@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
+use std::ops::{Add, Sub};
+use rand::{distributions::Distribution, distributions::Bernoulli};
 
 #[derive(Resource, Default)]
 struct Turn(u32);
@@ -97,6 +99,30 @@ struct QuestBundle {
     description: QuestDescription,
     progress: TurnTimer,
     status: QuestStatusAvailable,
+}
+
+#[derive(Debug)]
+struct Percent(i32); // Represents a percentage value, normally 0-100, but we allow for negative or >100 values while adding values together.
+impl Add for Percent {
+    type Output = Percent;
+
+    fn add(self, rhs: Percent) -> Percent {
+        Percent(self.0 + rhs.0)
+    }
+}
+
+impl Sub for Percent {
+    type Output = Percent;
+
+    fn sub(self, rhs: Percent) -> Percent {
+        Percent(self.0 - rhs.0)
+    }
+}
+
+impl Percent {
+    fn distribution(&self) -> Distribution<bool> {
+        Bernoulli::from_ratio(self.0.clamp(0, 100), 100)
+    }
 }
 
 fn main() {
@@ -361,7 +387,7 @@ fn advance_turn_timer_doesnt_go_past_zero() {
     assert_eq!(timer.turns_remaining, 0);
 }
 
-// For Quests that are Available with a complete TurnTimer, despawn the entity.
+// When turn timer completes for Available quest, despawn the quest and notify.
 fn expire_quest(
     mut commands: Commands,
     mut ev_turn_timer_complete: EventReader<TurnTimerCompleteEvent>,
