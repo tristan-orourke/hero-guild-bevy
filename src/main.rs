@@ -351,7 +351,7 @@ fn advance_turn_timer_doesnt_go_past_zero() {
     app.add_systems(Update, advance_turn_timer);
 
     // Send a TurnDeltaEvent that will go past zero
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(10));
+    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(5));
 
     // Run the system
     app.update();
@@ -383,6 +383,42 @@ fn expire_quest(
             )));
         }
     }
+}
+
+#[test]
+fn expire_quest_despawns_available_quest() {
+    let mut app = App::new();
+    app.add_event::<TurnTimerCompleteEvent>();
+    app.add_event::<NotificationEvent>();
+
+    // Add an available quest with a TurnTimer
+    let entity = app.world_mut().spawn((
+        Quest,
+        QuestStatusAvailable,
+        TurnTimer {
+            initial_value: 5,
+            turns_remaining: 0,
+        },
+    )).id();
+
+    // Add the system under test
+    app.add_systems(Update, expire_quest);
+
+    // Send a TurnTimerCompleteEvent for the quest
+    app.world_mut().resource_mut::<Events<TurnTimerCompleteEvent>>()
+        .send(TurnTimerCompleteEvent(entity));
+
+    // Run the system
+    app.update();
+
+    // Check that the quest was despawned
+    assert!(!app.world().get::<Quest>(entity).is_some());
+
+    // Check that a notification was sent
+    let notification_events = app.world().resource::<Events<NotificationEvent>>();
+    let mut reader = notification_events.get_cursor();
+    let notification = reader.read(notification_events).next().unwrap();
+    assert_eq!(notification.0, format!("An available quest expired: entity {:?}", entity));
 }
 
 // On TurnTimerCompleteEvent event, for entities with Quest and QuestInProgress markers, a ProbabilityOfSuccess.
