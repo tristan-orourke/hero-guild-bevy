@@ -101,7 +101,16 @@ struct QuestBundle {
     status: QuestStatusAvailable,
 }
 
-#[derive(Debug)]
+#[derive(Event)]
+struct StartQuestEvent {
+    quest: Entity,
+    heroes: Vec<Entity>
+}
+
+#[derive(Component)]
+struct ProbabilityOfSuccess(Percent);
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 struct Percent(i32); // Represents a percentage value, normally 0-100, but we allow for negative or >100 values while adding values together.
 impl Add for Percent {
     type Output = Percent;
@@ -447,4 +456,81 @@ fn expire_quest_despawns_available_quest() {
     assert_eq!(notification.0, format!("An available quest expired: entity {:?}", entity));
 }
 
-// On TurnTimerCompleteEvent event, for entities with Quest and QuestInProgress markers, a ProbabilityOfSuccess.
+// When timer completes for an InProgress quest with a percentage of success, determine result, despawn the quest, and emit a End of Quest event.
+// TODO
+
+// When a quest is started, set quest and hero statuses, and begin the quest timer.
+fn start_quest(
+    mut commands: Commands,
+    mut ev_start_quest: EventReader<StartQuestEvent>,
+    quests_query: Query<(&QuestDescription), With<Quest>>,
+    heroes_query: Query<(&LevelState, &Person), With<Hero>>
+) {
+    for StartQuestEvent { quest, heroes } in ev_start_quest.read() {
+        if let Ok(description) = quests_query.get(*quest) {
+            // Set the quest status to InProgress
+            commands.entity(*quest)
+                .remove::<QuestStatusAvailable>()
+                .insert(QuestStatusInProgress)
+                // TODO: Will this work if quest already has a TurnTimer?
+                .insert(TurnTimer {
+                    initial_value: description.turns_to_complete,
+                    turns_remaining: description.turns_to_complete,
+                });
+
+            // Assign heros to quest, using ChildOf/Children relationships
+            for hero in heroes.iter() {
+                commands.entity(*hero).insert(ChildOf(*quest));
+            }
+
+            // Determine probability of success based on hero levels and quest difficulty
+            // TODO:
+        }
+    }
+}
+
+fn probability_of_quest_success(difficulty_level: u32, heros: &Vec<(LevelState, Person)>) -> Percent {
+    let total_effectiveness: i32 = heros.iter().map(|(level, _)| -> i32 {
+        let baseline_effectiveness = 70; // Effectiveness percentage if hero level matches difficulty level
+        let diff_per_level = 20; // Effectiveness increases by 20% for each level above difficulty level
+        let level_diff = level.level as i32 - difficulty_level as i32; // Positive if hero is stronger than difficulty level
+        baseline_effectiveness + (level_diff * diff_per_level)
+    }).sum();
+    let average_effectiveness = total_effectiveness / heros.len() as i32;
+    Percent(average_effectiveness)
+}
+
+#[test]
+fn probability_of_quest_success_finds_expected_values() {
+    // TODO: derive default to make it easier to create test data
+    let heros_lvl_3 = vec![
+        (LevelState { level: 3, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Friendly, relationships: HashMap::new() }),
+        (LevelState { level: 3, exp: 0, exp_to_next: 100 }, Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
+        (LevelState { level: 3, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Learner, relationships: HashMap::new() }),
+    ];
+    assert_eq!(probability_of_quest_success(5, &heros_lvl_3), Percent(30));
+    assert_eq!(probability_of_quest_success(4, &heros_lvl_3), Percent(50));
+    assert_eq!(probability_of_quest_success(3, &heros_lvl_3), Percent(70));
+    assert_eq!(probability_of_quest_success(2, &heros_lvl_3), Percent(90));
+    assert_eq!(probability_of_quest_success(1, &heros_lvl_3), Percent(110));
+
+    let heros_avg_3 = vec![
+        (LevelState { level: 3, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Friendly, relationships: HashMap::new() }),
+        (LevelState { level: 2, exp: 0, exp_to_next: 100 }, Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
+        (LevelState { level: 4, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Learner, relationships: HashMap::new() }),
+    ];
+    assert_eq!(probability_of_quest_success(5, &heros_avg_3), Percent(30));
+    assert_eq!(probability_of_quest_success(4, &heros_avg_3), Percent(50));
+    assert_eq!(probability_of_quest_success(3, &heros_avg_3), Percent(70));
+    assert_eq!(probability_of_quest_success(2, &heros_avg_3), Percent(90));
+    assert_eq!(probability_of_quest_success(1, &heros_avg_3), Percent(110));
+
+    let heros_avg_fractional = vec![
+        (LevelState { level: 3, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Friendly, relationships: HashMap::new() }),
+        (LevelState { level: 2, exp: 0, exp_to_next: 100 }, Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
+        (LevelState { level: 5, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Learner, relationships: HashMap::new() }),
+    ];
+    assert_eq!(probability_of_quest_success(4, &heros_avg_fractional), Percent(93));
+    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(73));
+    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(53));
+}
