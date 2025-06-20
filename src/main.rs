@@ -410,7 +410,7 @@ fn expire_quest(
     mut ev_notify: EventWriter<NotificationEvent>,
 ) {
     for TurnTimerCompleteEvent(entity) in ev_turn_timer_complete.read() {
-        if let Ok(_) = query.get(*entity) {
+        if query.get(*entity).is_ok() {
             commands.entity(*entity).despawn();
             ev_notify.write(NotificationEvent(format!(
                 "An available quest expired: entity {:?}",
@@ -463,7 +463,7 @@ fn expire_quest_despawns_available_quest() {
 fn start_quest(
     mut commands: Commands,
     mut ev_start_quest: EventReader<StartQuestEvent>,
-    quests_query: Query<(&QuestDescription), With<Quest>>,
+    quests_query: Query<&QuestDescription, With<Quest>>,
     heroes_query: Query<(&LevelState, &Person), With<Hero>>
 ) {
     for StartQuestEvent { quest, heroes } in ev_start_quest.read() {
@@ -489,7 +489,7 @@ fn start_quest(
     }
 }
 
-fn probability_of_quest_success(difficulty_level: u32, heros: &Vec<(LevelState, Person)>) -> Percent {
+fn probability_of_quest_success(difficulty_level: u32, heros: &[(LevelState, Person)]) -> Percent {
     let total_effectiveness: i32 = heros.iter().map(|(level, _)| -> i32 {
         let baseline_effectiveness = 70; // Effectiveness percentage if hero level matches difficulty level
         let diff_per_level = 20; // Effectiveness increases by 20% for each level above difficulty level
