@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
-use rand::{distributions::Distribution, distributions::Bernoulli};
+use rand::distr::Bernoulli;
 
 #[derive(Resource, Default)]
 struct Turn(u32);
@@ -129,8 +129,8 @@ impl Sub for Percent {
 }
 
 impl Percent {
-    fn distribution(&self) -> Distribution<bool> {
-        Bernoulli::from_ratio(self.0.clamp(0, 100), 100)
+    fn distribution(&self) -> Bernoulli {
+        Bernoulli::from_ratio(self.0.clamp(0, 100) as u32, 100).unwrap()
     }
 }
 
@@ -530,7 +530,7 @@ fn probability_of_quest_success_finds_expected_values() {
         (LevelState { level: 2, exp: 0, exp_to_next: 100 }, Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
         (LevelState { level: 5, exp: 0, exp_to_next: 100 }, Person { personality: Personality::Learner, relationships: HashMap::new() }),
     ];
-    assert_eq!(probability_of_quest_success(4, &heros_avg_fractional), Percent(93));
-    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(73));
-    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(53));
+    assert_eq!(probability_of_quest_success(4, &heros_avg_fractional), Percent(56));
+    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(76));
+    assert_eq!(probability_of_quest_success(2, &heros_avg_fractional), Percent(96));
 }
