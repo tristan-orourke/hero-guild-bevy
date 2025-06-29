@@ -1,8 +1,11 @@
 use bevy::prelude::*;
+use rand::{
+    SeedableRng,
+    distr::{Bernoulli, Distribution},
+};
+use rand_chacha::ChaCha8Rng;
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
-use rand::{distr::{Distribution, Bernoulli}, SeedableRng};
-use rand_chacha::ChaCha8Rng;
 
 #[derive(Resource, Default)]
 struct Turn(u32);
@@ -109,20 +112,20 @@ struct QuestBundle {
 #[derive(Event)]
 struct StartQuestEvent {
     quest: Entity,
-    heroes: Vec<Entity>
+    heroes: Vec<Entity>,
 }
 
 #[derive(Event)]
 struct QuestCompleteEvent {
     quest_description: QuestDescription,
-    heroes: Vec<Entity>, // Heroes that completed the quest
+    heroes: Vec<Entity>,          // Heroes that completed the quest
     success_probability: Percent, // Probability of success for the quest
-    is_successful: bool, // Whether the quest was successful or not
-    exp_reward: u32, // Experience reward for the heroes
-    gold_reward: u32, // Gold reward for the guild
-    // TODO: implement items
-    // TODO: implement relationship updates
-    // TODO: implement injuries 
+    is_successful: bool,          // Whether the quest was successful or not
+    exp_reward: u32,              // Experience reward for the heroes
+    gold_reward: u32,             // Gold reward for the guild
+                                  // TODO: implement items
+                                  // TODO: implement relationship updates
+                                  // TODO: implement injuries
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -171,7 +174,7 @@ fn main() {
 fn setup(mut commands: Commands) {
     let seeded_rng = ChaCha8Rng::seed_from_u64(42);
     commands.insert_resource(RandomSource(seeded_rng));
-    
+
     // Setup some initial heros and quests
     commands.spawn(HeroBundle {
         marker: Hero,
@@ -258,7 +261,6 @@ fn advance_turn(
     )));
 }
 
-
 #[test]
 fn turn_delta_did_advance_turn() {
     let mut app = App::new();
@@ -273,8 +275,12 @@ fn turn_delta_did_advance_turn() {
     app.add_systems(Update, advance_turn);
 
     // Send multiple TurnDeltaEvents
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(3));
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(2));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(3));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(2));
 
     // Run the system
     app.update();
@@ -297,7 +303,9 @@ fn turn_delta_did_send_notification() {
     app.add_systems(Update, advance_turn);
 
     // Send a TurnDeltaEvent
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(1));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(1));
 
     // Run the system
     app.update();
@@ -305,9 +313,11 @@ fn turn_delta_did_send_notification() {
     // Check that a notification was sent
     let notification_events = app.world().resource::<Events<NotificationEvent>>();
     let mut notification_reader = notification_events.get_cursor();
-    let notification = notification_reader.read(notification_events).next().unwrap();
+    let notification = notification_reader
+        .read(notification_events)
+        .next()
+        .unwrap();
     assert_eq!(notification.0, "Turn advanced by 1. Current turn: 1");
-    
 }
 
 // On TurnDelta event, for TurnTimer components, advance progress. If progress complete, emit TurnTimerComplete event.
@@ -336,19 +346,24 @@ fn turn_delta_did_advance_turn_timer() {
     app.add_event::<TurnTimerCompleteEvent>();
 
     // Add a TurnTimer component to an entity
-    let entity = app.world_mut().spawn((
-        TurnTimer {
+    let entity = app
+        .world_mut()
+        .spawn((TurnTimer {
             initial_value: 5,
             turns_remaining: 5,
-        },
-    )).id();
+        },))
+        .id();
 
     // Add the system under test
     app.add_systems(Update, advance_turn_timer);
 
     // Send a TurnDeltaEvent
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(1));
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(2));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(1));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(2));
 
     // Run the system
     app.update();
@@ -365,18 +380,21 @@ fn advance_turn_timer_did_emit_completion_event() {
     app.add_event::<TurnTimerCompleteEvent>();
 
     // Add a TurnTimer component to an entity
-    let entity = app.world_mut().spawn((
-        TurnTimer {
+    let entity = app
+        .world_mut()
+        .spawn((TurnTimer {
             initial_value: 5,
             turns_remaining: 5,
-        },
-    )).id();
+        },))
+        .id();
 
     // Add the system under test
     app.add_systems(Update, advance_turn_timer);
 
     // Send a TurnDeltaEvent that will complete the timer
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(5));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(5));
 
     // Run the system
     app.update();
@@ -395,18 +413,21 @@ fn advance_turn_timer_doesnt_go_past_zero() {
     app.add_event::<TurnTimerCompleteEvent>();
 
     // Add a TurnTimer component to an entity
-    let entity = app.world_mut().spawn((
-        TurnTimer {
+    let entity = app
+        .world_mut()
+        .spawn((TurnTimer {
             initial_value: 5,
             turns_remaining: 5,
-        },
-    )).id();
+        },))
+        .id();
 
     // Add the system under test
     app.add_systems(Update, advance_turn_timer);
 
     // Send a TurnDeltaEvent that will go past zero
-    app.world_mut().resource_mut::<Events<TurnDeltaEvent>>().send(TurnDeltaEvent(5));
+    app.world_mut()
+        .resource_mut::<Events<TurnDeltaEvent>>()
+        .send(TurnDeltaEvent(5));
 
     // Run the system
     app.update();
@@ -420,13 +441,7 @@ fn advance_turn_timer_doesnt_go_past_zero() {
 fn expire_quest(
     mut commands: Commands,
     mut ev_turn_timer_complete: EventReader<TurnTimerCompleteEvent>,
-    query: Query<
-        Entity,
-        (
-            With<Quest>,
-            With<QuestStatusAvailable>,
-        ),
-    >,
+    query: Query<Entity, (With<Quest>, With<QuestStatusAvailable>)>,
     mut ev_notify: EventWriter<NotificationEvent>,
 ) {
     for TurnTimerCompleteEvent(entity) in ev_turn_timer_complete.read() {
@@ -447,20 +462,24 @@ fn expire_quest_despawns_available_quest() {
     app.add_event::<NotificationEvent>();
 
     // Add an available quest with a TurnTimer
-    let entity = app.world_mut().spawn((
-        Quest,
-        QuestStatusAvailable,
-        TurnTimer {
-            initial_value: 5,
-            turns_remaining: 0,
-        },
-    )).id();
+    let entity = app
+        .world_mut()
+        .spawn((
+            Quest,
+            QuestStatusAvailable,
+            TurnTimer {
+                initial_value: 5,
+                turns_remaining: 0,
+            },
+        ))
+        .id();
 
     // Add the system under test
     app.add_systems(Update, expire_quest);
 
     // Send a TurnTimerCompleteEvent for the quest
-    app.world_mut().resource_mut::<Events<TurnTimerCompleteEvent>>()
+    app.world_mut()
+        .resource_mut::<Events<TurnTimerCompleteEvent>>()
         .send(TurnTimerCompleteEvent(entity));
 
     // Run the system
@@ -473,7 +492,10 @@ fn expire_quest_despawns_available_quest() {
     let notification_events = app.world().resource::<Events<NotificationEvent>>();
     let mut reader = notification_events.get_cursor();
     let notification = reader.read(notification_events).next().unwrap();
-    assert_eq!(notification.0, format!("An available quest expired: entity {:?}", entity));
+    assert_eq!(
+        notification.0,
+        format!("An available quest expired: entity {:?}", entity)
+    );
 }
 
 // When timer completes for an InProgress quest with a percentage of success, determine result, despawn the quest, and emit a End of Quest event.
@@ -488,7 +510,8 @@ fn start_quest(
     for StartQuestEvent { quest, heroes } in ev_start_quest.read() {
         if let Ok(description) = quests_query.get(*quest) {
             // Set the quest status to InProgress
-            commands.entity(*quest)
+            commands
+                .entity(*quest)
                 .remove::<QuestStatusAvailable>()
                 .insert(QuestStatusInProgress)
                 // TODO: Will this work if quest already has a TurnTimer?
@@ -510,24 +533,31 @@ fn complete_quest(
     mut commands: Commands,
     mut ev_turn_timer_complete: EventReader<TurnTimerCompleteEvent>,
     mut random_src: ResMut<RandomSource>,
-    quests_query: Query<(&QuestDescription,  &Children), (With<Quest>, With<QuestStatusInProgress>)>,
+    quests_query: Query<(&QuestDescription, &Children), (With<Quest>, With<QuestStatusInProgress>)>,
     heroes_query: Query<(&LevelState, &Person), With<Hero>>,
     mut ev_quest_complete: EventWriter<QuestCompleteEvent>,
 ) {
     for TurnTimerCompleteEvent(entity) in ev_turn_timer_complete.read() {
         if let Ok((description, children)) = quests_query.get(*entity) {
-           let heroes: Vec<_> = children.iter()
-             .map(|child| heroes_query.get(child).unwrap()).collect();
-            let success_probability = probability_of_quest_success(description.difficulty_level, &heroes[..]);
+            let heroes: Vec<_> = children
+                .iter()
+                .map(|child| heroes_query.get(child).unwrap())
+                .collect();
+            let success_probability =
+                probability_of_quest_success(description.difficulty_level, &heroes[..]);
             let rng = &mut random_src.0;
-            let is_successful = success_probability.distribution().sample(rng); 
+            let is_successful = success_probability.distribution().sample(rng);
             ev_quest_complete.write(QuestCompleteEvent {
                 quest_description: *description,
                 heroes: children.to_vec(), // Heroes that were part of the quest
                 success_probability,
                 is_successful,
                 exp_reward: description.exp_reward, // Heroes gain experience regardless of success
-                gold_reward: if is_successful { description.gold_reward } else { 0 }, // Guild gains gold only on success,
+                gold_reward: if is_successful {
+                    description.gold_reward
+                } else {
+                    0
+                }, // Guild gains gold only on success,
             });
             // Remove ChildOf components before despawning quest, or heroes will be despawned with it.
             for child in children.iter() {
@@ -546,46 +576,55 @@ fn complete_quest_despawns_quest_and_unlinks_heroes() {
     app.insert_resource::<RandomSource>(RandomSource(ChaCha8Rng::seed_from_u64(42)));
 
     // Add a quest with a TurnTimer
-    let quest_entity = app.world_mut().spawn((
-        Quest,
-        QuestStatusInProgress,
-        TurnTimer {
-            initial_value: 5,
-            turns_remaining: 0,
-        },
-        QuestDescription {
-            difficulty_level: 1,
-            turns_to_complete: 5,
-            exp_reward: 50,
-            gold_reward: 100,
-            item_reward: None,
-            turns_to_expiry: 10,
-        },
-    )).id();
+    let quest_entity = app
+        .world_mut()
+        .spawn((
+            Quest,
+            QuestStatusInProgress,
+            TurnTimer {
+                initial_value: 5,
+                turns_remaining: 0,
+            },
+            QuestDescription {
+                difficulty_level: 1,
+                turns_to_complete: 5,
+                exp_reward: 50,
+                gold_reward: 100,
+                item_reward: None,
+                turns_to_expiry: 10,
+            },
+        ))
+        .id();
 
     // Add a hero to the quest
-    let hero_entity = app.world_mut().spawn(HeroBundle {
-        marker: Hero,
-        level: LevelState {
-            level: 1,
-            exp: 0,
-            exp_to_next: 100,
-        },
-        class: HeroClass::Warrior,
-        person: Person {
-            personality: Personality::Friendly,
-            relationships: HashMap::new(),
-        },
-    }).id();
-    
+    let hero_entity = app
+        .world_mut()
+        .spawn(HeroBundle {
+            marker: Hero,
+            level: LevelState {
+                level: 1,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            class: HeroClass::Warrior,
+            person: Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        })
+        .id();
+
     // Link hero to quest
-    app.world_mut().entity_mut(hero_entity).insert(ChildOf(quest_entity));
+    app.world_mut()
+        .entity_mut(hero_entity)
+        .insert(ChildOf(quest_entity));
 
     // Add the system under test
     app.add_systems(Update, complete_quest);
 
     // Send a TurnTimerCompleteEvent for the quest
-    app.world_mut().resource_mut::<Events<TurnTimerCompleteEvent>>()
+    app.world_mut()
+        .resource_mut::<Events<TurnTimerCompleteEvent>>()
         .send(TurnTimerCompleteEvent(quest_entity));
 
     // Run the system
@@ -608,13 +647,19 @@ fn complete_quest_despawns_quest_and_unlinks_heroes() {
     assert_eq!(event.quest_description.difficulty_level, 1);
 }
 
-fn probability_of_quest_success(difficulty_level: u32, heros: &[(&LevelState, &Person)]) -> Percent {
-    let total_effectiveness: i32 = heros.iter().map(|(level, _)| -> i32 {
-        let baseline_effectiveness = 70; // Effectiveness percentage if hero level matches difficulty level
-        let diff_per_level = 20; // Effectiveness increases by 20% for each level above difficulty level
-        let level_diff = level.level as i32 - difficulty_level as i32; // Positive if hero is stronger than difficulty level
-        baseline_effectiveness + (level_diff * diff_per_level)
-    }).sum();
+fn probability_of_quest_success(
+    difficulty_level: u32,
+    heros: &[(&LevelState, &Person)],
+) -> Percent {
+    let total_effectiveness: i32 = heros
+        .iter()
+        .map(|(level, _)| -> i32 {
+            let baseline_effectiveness = 70; // Effectiveness percentage if hero level matches difficulty level
+            let diff_per_level = 20; // Effectiveness increases by 20% for each level above difficulty level
+            let level_diff = level.level as i32 - difficulty_level as i32; // Positive if hero is stronger than difficulty level
+            baseline_effectiveness + (level_diff * diff_per_level)
+        })
+        .sum();
     let average_effectiveness = total_effectiveness / heros.len() as i32;
     Percent(average_effectiveness)
 }
@@ -623,9 +668,39 @@ fn probability_of_quest_success(difficulty_level: u32, heros: &[(&LevelState, &P
 fn probability_of_quest_success_finds_expected_values() {
     // TODO: derive default to make it easier to create test data
     let heros_lvl_3 = [
-        (&LevelState { level: 3, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Friendly, relationships: HashMap::new() }),
-        (&LevelState { level: 3, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
-        (&LevelState { level: 3, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Learner, relationships: HashMap::new() }),
+        (
+            &LevelState {
+                level: 3,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 3,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::ResultOriented,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 3,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Learner,
+                relationships: HashMap::new(),
+            },
+        ),
     ];
     assert_eq!(probability_of_quest_success(5, &heros_lvl_3), Percent(30));
     assert_eq!(probability_of_quest_success(4, &heros_lvl_3), Percent(50));
@@ -634,9 +709,39 @@ fn probability_of_quest_success_finds_expected_values() {
     assert_eq!(probability_of_quest_success(1, &heros_lvl_3), Percent(110));
 
     let heros_avg_3 = [
-        (&LevelState { level: 3, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Friendly, relationships: HashMap::new() }),
-        (&LevelState { level: 2, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
-        (&LevelState { level: 4, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Learner, relationships: HashMap::new() }),
+        (
+            &LevelState {
+                level: 3,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 2,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::ResultOriented,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 4,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Learner,
+                relationships: HashMap::new(),
+            },
+        ),
     ];
     assert_eq!(probability_of_quest_success(5, &heros_avg_3), Percent(30));
     assert_eq!(probability_of_quest_success(4, &heros_avg_3), Percent(50));
@@ -645,11 +750,50 @@ fn probability_of_quest_success_finds_expected_values() {
     assert_eq!(probability_of_quest_success(1, &heros_avg_3), Percent(110));
 
     let heros_avg_fractional = [
-        (&LevelState { level: 3, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Friendly, relationships: HashMap::new() }),
-        (&LevelState { level: 2, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::ResultOriented, relationships: HashMap::new() }),
-        (&LevelState { level: 5, exp: 0, exp_to_next: 100 }, &Person { personality: Personality::Learner, relationships: HashMap::new() }),
+        (
+            &LevelState {
+                level: 3,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 2,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::ResultOriented,
+                relationships: HashMap::new(),
+            },
+        ),
+        (
+            &LevelState {
+                level: 5,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            &Person {
+                personality: Personality::Learner,
+                relationships: HashMap::new(),
+            },
+        ),
     ];
-    assert_eq!(probability_of_quest_success(4, &heros_avg_fractional), Percent(56));
-    assert_eq!(probability_of_quest_success(3, &heros_avg_fractional), Percent(76));
-    assert_eq!(probability_of_quest_success(2, &heros_avg_fractional), Percent(96));
+    assert_eq!(
+        probability_of_quest_success(4, &heros_avg_fractional),
+        Percent(56)
+    );
+    assert_eq!(
+        probability_of_quest_success(3, &heros_avg_fractional),
+        Percent(76)
+    );
+    assert_eq!(
+        probability_of_quest_success(2, &heros_avg_fractional),
+        Percent(96)
+    );
 }
