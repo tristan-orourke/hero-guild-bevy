@@ -27,6 +27,11 @@ struct NotificationEvent(String);
 #[derive(Resource)]
 struct RandomSource(ChaCha8Rng);
 
+#[derive(Resource, Default)]
+struct Guild {
+    gold: u32,
+}
+
 #[derive(Component)]
 struct Hero;
 
@@ -157,6 +162,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .init_resource::<Turn>()
         .init_resource::<Notificiations>()
+        .init_resource::<Guild>()
         .add_event::<NotificationEvent>()
         .add_event::<TurnDeltaEvent>()
         .add_event::<TurnTimerCompleteEvent>()
@@ -795,5 +801,206 @@ fn probability_of_quest_success_finds_expected_values() {
     assert_eq!(
         probability_of_quest_success(2, &heros_avg_fractional),
         Percent(96)
+    );
+}
+
+fn complete_quest_assign_exp(
+    mut ev_quest_complete: EventReader<QuestCompleteEvent>,
+    mut heroes_query: Query<&mut LevelState, With<Hero>>,
+) {
+    for event in ev_quest_complete.read() {
+        for hero in &event.heroes {
+            if let Ok(mut level_state) = heroes_query.get_mut(*hero) {
+                level_state.exp += event.exp_reward;
+            }
+        }
+    }
+}
+
+#[test]
+fn complete_quest_assign_exp_increments_hero_exp() {
+    let mut app = App::new();
+    app.add_event::<QuestCompleteEvent>();
+    app.add_systems(Update, complete_quest_assign_exp);
+    // Add a hero with initial exp
+    let hero_entity = app
+        .world_mut()
+        .spawn(HeroBundle {
+            marker: Hero,
+            level: LevelState {
+                level: 1,
+                exp: 50,
+                exp_to_next: 100,
+            },
+            class: HeroClass::Warrior,
+            person: Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        })
+        .id();
+    // Add a QuestCompleteEvent with exp reward
+    app.world_mut()
+        .resource_mut::<Events<QuestCompleteEvent>>()
+        .send(QuestCompleteEvent {
+            quest_description: QuestDescription {
+                difficulty_level: 1,
+                turns_to_complete: 5,
+                exp_reward: 50,
+                gold_reward: 100,
+                item_reward: None,
+                turns_to_expiry: 10,
+            },
+            heroes: vec![hero_entity],
+            success_probability: Percent(100),
+            is_successful: true,
+            exp_reward: 50,
+            gold_reward: 100,
+        });
+    // Run the system
+    app.update();
+    // Check that the hero's exp was incremented
+    let level_state = app.world().get::<LevelState>(hero_entity).unwrap();
+    assert_eq!(level_state.exp, 100);
+}
+
+fn complete_quest_updates_guild(
+    mut ev_quest_complete: EventReader<QuestCompleteEvent>,
+    mut guild: ResMut<Guild>,
+) {
+    for event in ev_quest_complete.read() {
+        if event.is_successful {
+            guild.gold += event.gold_reward;
+        }
+    }
+}
+
+fn complete_quest_send_notification(
+    mut ev_quest_complete: EventReader<QuestCompleteEvent>,
+    mut ev_notify: EventWriter<NotificationEvent>,
+) {
+    for event in ev_quest_complete.read() {
+        let success_str = if event.is_successful {
+            "successful"
+        } else {
+            "failed"
+        };
+        ev_notify.write(NotificationEvent(format!(
+            "Quest completed: {}. Heroes: {:?}, Exp Reward: {}, Gold Reward: {}, Success Probability: {:?}",
+            success_str, event.heroes, event.exp_reward, event.gold_reward, event.success_probability
+        )));
+    }
+}
+
+#[test]
+fn complete_quest_updates_guild_gold_only_on_success() {
+    let mut app = App::new();
+    app.init_resource::<Guild>();
+    app.add_event::<QuestCompleteEvent>();
+    app.add_systems(Update, complete_quest_updates_guild);
+    // Add a QuestCompleteEvent with gold reward
+    app.world_mut()
+        .resource_mut::<Events<QuestCompleteEvent>>()
+        .send(QuestCompleteEvent {
+            quest_description: QuestDescription {
+                difficulty_level: 1,
+                turns_to_complete: 5,
+                exp_reward: 50,
+                gold_reward: 100,
+                item_reward: None,
+                turns_to_expiry: 10,
+            },
+            heroes: vec![],
+            success_probability: Percent(100),
+            is_successful: true,
+            exp_reward: 50,
+            gold_reward: 100,
+        });
+    // Run the system
+    app.update();
+    // Check that the guild's gold was incremented
+    let guild = app.world().resource::<Guild>();
+    assert_eq!(guild.gold, 100);
+
+    // Add a QuestCompleteEvent which failed
+    app.world_mut()
+        .resource_mut::<Events<QuestCompleteEvent>>()
+        .send(QuestCompleteEvent {
+            quest_description: QuestDescription {
+                difficulty_level: 1,
+                turns_to_complete: 5,
+                exp_reward: 50,
+                gold_reward: 100,
+                item_reward: None,
+                turns_to_expiry: 10,
+            },
+            heroes: vec![],
+            success_probability: Percent(0),
+            is_successful: false,
+            exp_reward: 50,
+            gold_reward: 50,
+        });
+    // Run the system again
+    app.update();
+    // Check that the guild's gold was not incremented
+    let guild = app.world().resource::<Guild>();
+    assert_eq!(guild.gold, 100); // Still 100, since the quest failed
+}
+
+#[test]
+fn complete_quest_sends_notification() {
+    let mut app = App::new();
+    app.add_event::<QuestCompleteEvent>();
+    app.add_event::<NotificationEvent>();
+    app.add_systems(Update, complete_quest_send_notification);
+
+    // Create a Hero
+    let hero_entity = app
+        .world_mut()
+        .spawn(HeroBundle {
+            marker: Hero,
+            level: LevelState {
+                level: 1,
+                exp: 0,
+                exp_to_next: 100,
+            },
+            class: HeroClass::Warrior,
+            person: Person {
+                personality: Personality::Friendly,
+                relationships: HashMap::new(),
+            },
+        })
+        .id();
+
+    // Add a QuestCompleteEvent
+    app.world_mut()
+        .resource_mut::<Events<QuestCompleteEvent>>()
+        .send(QuestCompleteEvent {
+            quest_description: QuestDescription {
+                difficulty_level: 1,
+                turns_to_complete: 5,
+                exp_reward: 50,
+                gold_reward: 100,
+                item_reward: None,
+                turns_to_expiry: 10,
+            },
+            heroes: vec![hero_entity],
+            success_probability: Percent(100),
+            is_successful: true,
+            exp_reward: 50,
+            gold_reward: 100,
+        });
+    // Run the system
+    app.update();
+    // Check that a notification was sent
+    let notification_events = app.world().resource::<Events<NotificationEvent>>();
+    let mut reader = notification_events.get_cursor();
+    let notification = reader.read(notification_events).next().unwrap();
+    assert_eq!(
+        notification.0,
+        format!(
+            "Quest completed: successful. Heroes: [{:?}], Exp Reward: 50, Gold Reward: 100, Success Probability: Percent(100)",
+            hero_entity
+        )
     );
 }
