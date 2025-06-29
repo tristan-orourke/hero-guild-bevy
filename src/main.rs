@@ -174,6 +174,9 @@ fn main() {
         .add_systems(Update, expire_quest)
         .add_systems(Update, start_quest)
         .add_systems(Update, complete_quest)
+        .add_systems(Update, complete_quest_assign_exp)
+        .add_systems(Update, complete_quest_updates_guild)
+        .add_systems(Update, complete_quest_send_notification)
         .run();
 }
 
@@ -1004,3 +1007,15 @@ fn complete_quest_sends_notification() {
         )
     );
 }
+
+// Heros level up when gaining enough experience
+
+// Update hero opinions on quest ends
+
+// TODO: incorporate hero opinions into quest success probability
+
+// Periodically generate new quests
+
+// Periodically generate new available heroes, with option of hiring them
+
+// Heroes salary removed from guild gold every turn

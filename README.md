@@ -69,3 +69,5 @@ The primary choices are: how to put heroes together to optimize the parties, wis
 - Travelling merchants who offer varying prices on food and items, or even may buy items.
 - negotiated salaries
 - individual happiness levels for heroes, with the threat of quitting
+- heroes gain skills which make thing more complicated
+- quests which unlock different quest chains
